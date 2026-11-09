@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Device & Connection Inspector</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #0f172a;
+            color: #f8fafc;
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        h2 { color: #38bdf8; border-bottom: 2px solid #334155; padding-bottom: 8px; }
+        .card {
+            background: #1e293b;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #334155;
+        }
+        button {
+            background: #0284c7;
+            color: white;
+            border: none;
+            padding: 10px 18px;
+            font-size: 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        button:hover { background: #0369a1; }
+        video {
+            width: 100%;
+            max-height: 300px;
+            background: black;
+            border-radius: 6px;
+            margin-top: 10px;
+            display: none;
+        }
+        pre { white-space: pre-wrap; word-break: break-all; font-size: 0.9rem; color: #cbd5e1; }
+    </style>
+</head>
+<body>
+
+    <h2>Visitor Analytics & Diagnostics</h2>
+
+    <div class="card">
+        <h3>Network & IP Info</h3>
+        <pre id="ip-info">Fetching IP details...</pre>
+    </div>
+
+    <div class="card">
+        <h3>Device & Browser Specs</h3>
+        <pre id="device-info">Detecting hardware profile...</pre>
+    </div>
+
+    <div class="card">
+        <h3>Camera Feed Test</h3>
+        <p style="font-size: 0.85rem; color: #94a3b8;">Requires explicit user interaction and permission grant per browser policy.</p>
+        <button id="cam-btn">Request Camera Access</button>
+        <video id="webcam" autoplay playsinline></video>
+    </div>
+
+    <script>
+        // 1. Fetch IP & Geolocation
+        async function fetchIpData() {
+            try {
+                const response = await fetch('https://ipapi.co/json/');
+                const data = await response.json();
+                document.getElementById('ip-info').textContent = 
+                    `IP Address: ${data.ip}\nLocation: ${data.city}, ${data.region}, ${data.country_name}\nISP: ${data.org}`;
+            } catch (err) {
+                document.getElementById('ip-info').textContent = 'Unable to fetch public IP data.';
+            }
+        }
+
+        // 2. Extract Device Details
+        async function getDeviceSpecs() {
+            let info = `User-Agent: ${navigator.userAgent}\n`;
+            if (navigator.userAgentData) {
+                try {
+                    const hints = await navigator.userAgentData.getHighEntropyValues(["model", "platformVersion", "uaFullVersion"]);
+                    info += `Platform: ${hints.platform} (${hints.platformVersion})\n`;
+                    info += `Mobile Device: ${navigator.userAgentData.mobile}\n`;
+                    info += `Brand/Model: ${hints.model || 'Generic / Restricted by Browser'}\n`;
+                } catch (e) {
+                    info += `Platform: ${navigator.platform}\n`;
+                }
+            } else {
+                info += `Platform: ${navigator.platform}\n`;
+            }
+            document.getElementById('device-info').textContent = info;
+        }
+
+        // 3. Handle Camera Request
+        document.getElementById('cam-btn').addEventListener('click', async () => {
+            const videoElem = document.getElementById('webcam');
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+                videoElem.style.display = 'block';
+                videoElem.srcObject = stream;
+            } catch (err) {
+                alert('Camera access denied or unavailable: ' + err.message);
+            }
+        });
+
+        // Initialize scripts on load
+        fetchIpData();
+        getDeviceSpecs();
+    </script>
+</body>
+</html>
